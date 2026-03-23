@@ -21,14 +21,11 @@ export async function fetchWithProxy(
   const proxyUrl = getRandomProxyUrl();
 
   if (proxyUrl) {
-    // Use undici ProxyAgent for proxy support in Node.js
-    const { ProxyAgent } = await import("undici");
-    const agent = new ProxyAgent(proxyUrl);
+    // Bun's native fetch supports proxy as a string option
     return fetch(url, {
       ...init,
-      // @ts-expect-error -- Node.js fetch supports dispatcher
-      dispatcher: agent,
-    });
+      proxy: proxyUrl,
+    } as RequestInit);
   }
 
   return fetch(url, init);
