@@ -275,7 +275,7 @@ function SearchPage() {
 
       {/* Footer */}
       <footer className="w-full max-w-[720px] mx-auto px-6 py-6 border-t border-[var(--border)] font-[family-name:var(--font-geist-mono)] text-[11px] text-[var(--text-tertiary)] flex gap-4">
-        <span>API</span>
+        <a href="/api/suggest" target="_blank" rel="noopener noreferrer" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors no-underline">API</a>
         <span>Telegram Bot</span>
         <span>MCP</span>
       </footer>
