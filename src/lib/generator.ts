@@ -54,7 +54,8 @@ const VALID_NAME_RE = /^[a-z0-9]+$/;
 
 export async function generateNames(
   description: string,
-  count: number
+  count: number,
+  _retryCount = 0
 ): Promise<NameCandidate[]> {
   const client = new Anthropic({
     apiKey: process.env.SDK_ANTHROPIC_API_KEY,
@@ -79,11 +80,25 @@ export async function generateNames(
 
   let parsed: unknown[];
   try {
-    // Extract JSON array from response (handle markdown code blocks)
+    // Extract JSON array from response (handle markdown code blocks, nested arrays, etc.)
+    // Try increasingly aggressive extraction patterns
+    let jsonStr: string | null = null;
+
+    // Pattern 1: Match outermost JSON array
     const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("No JSON array found");
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
+    if (jsonMatch) jsonStr = jsonMatch[0];
+
+    // Pattern 2: If the whole text is JSON (no wrapping)
+    if (!jsonStr && text.trim().startsWith("[")) jsonStr = text.trim();
+
+    if (!jsonStr) {
+      console.error("[generator] No JSON array found in LLM output:", text.slice(0, 500));
+      throw new Error("No JSON array found");
+    }
+
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("[generator] Failed to parse LLM output:", text.slice(0, 500));
     throw new Error("generation_failed: could not parse LLM output");
   }
 
@@ -92,20 +107,35 @@ export async function generateNames(
     if (
       typeof item === "object" &&
       item !== null &&
-      "name" in item &&
-      "relevance" in item
+      "name" in item
     ) {
-      const { name, relevance } = item as { name: string; relevance: number };
-      if (typeof name === "string" && VALID_NAME_RE.test(name)) {
+      const { name, relevance } = item as { name: string; relevance: unknown };
+      // Validate name: lowercase alphanumeric only, 2-15 chars
+      if (
+        typeof name === "string" &&
+        VALID_NAME_RE.test(name) &&
+        name.length >= 2 &&
+        name.length <= 15
+      ) {
+        const numRelevance = Number(relevance);
         candidates.push({
           name,
-          relevance: Math.max(0, Math.min(1, Number(relevance) || 0)),
+          relevance: Math.max(0, Math.min(1, isNaN(numRelevance) ? 0.5 : numRelevance)),
         });
       }
     }
   }
 
   if (candidates.length === 0) {
+    // Log what we got so we can debug
+    console.error("[generator] No valid candidates after filtering. Parsed items:", JSON.stringify(parsed).slice(0, 500));
+
+    // Retry once
+    if (_retryCount < 1) {
+      console.log("[generator] Retrying generation (attempt 2)...");
+      return generateNames(description, count, _retryCount + 1);
+    }
+
     throw new Error("no_names_generated: LLM returned no valid candidates");
   }
 
