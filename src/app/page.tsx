@@ -215,7 +215,7 @@ function SearchPage() {
                             {s.name}
                           </span>
                           <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-secondary)] px-2 py-2.5">
-                            .{String(s.score).replace(/^0/, "")}
+                            {s.score.toFixed(2)}
                           </span>
                           {platforms.map((p) => (
                             <span key={p} className="text-center text-sm py-2.5">
