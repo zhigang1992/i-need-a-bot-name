@@ -1,0 +1,292 @@
+"use client";
+
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import type { SuggestResponse, CheckResult } from "@/lib/types";
+
+function AvailabilityIcon({ result }: { result: CheckResult }) {
+  if (result.confidence === "error") {
+    return (
+      <span className="text-[var(--error)]" title={result.error || "Couldn't check"}>
+        &#x26A0;
+      </span>
+    );
+  }
+  if (result.available) {
+    return <span className="text-[var(--accent)]">&#x2713;</span>;
+  }
+  return <span className="text-[var(--taken)]">&mdash;</span>;
+}
+
+function SkeletonRows() {
+  return (
+    <>
+      {[1, 2, 3].map((i) => (
+        <tr key={i}>
+          <td className="py-2.5 px-2">
+            <div className="skeleton h-4" style={{ width: 80 + i * 20 }} />
+          </td>
+          <td className="py-2.5 px-2">
+            <div className="skeleton h-4 w-8" />
+          </td>
+          {["a", "b", "c", "d"].map((p) => (
+            <td key={p} className="py-2.5 px-2 text-center">
+              <div className="skeleton h-4 w-4 rounded-full mx-auto" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function SearchPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initialQuery = searchParams.get("q") || "";
+
+  const [query, setQuery] = useState(initialQuery);
+  const [results, setResults] = useState<SuggestResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedName, setExpandedName] = useState<string | null>(null);
+  const [copiedName, setCopiedName] = useState<string | null>(null);
+
+  const search = useCallback(
+    async (description: string) => {
+      if (!description.trim()) return;
+
+      setLoading(true);
+      setError(null);
+      setResults(null);
+      setExpandedName(null);
+
+      router.push(`/?q=${encodeURIComponent(description)}`, { scroll: false });
+
+      try {
+        const res = await fetch("/api/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: description.trim(), count: 5 }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          setError(data.message || "Something went wrong. Try again.");
+          return;
+        }
+
+        setResults(data);
+      } catch {
+        setError("Something went wrong. Try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    if (initialQuery) search(initialQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const platforms = ["domain", "npm", "github", "telegram"];
+  const platformHeaders: Record<string, string> = {
+    domain: ".com",
+    npm: "npm",
+    github: "github",
+    telegram: "telegram",
+  };
+
+  const platformLinks: Record<string, (v: string) => string> = {
+    domain: (v) => `https://www.namecheap.com/domains/registration/results/?domain=${v}`,
+    npm: (v) => `https://www.npmjs.com/package/${v}`,
+    github: (v) => `https://github.com/organizations/new?plan=free`,
+    telegram: () => `https://t.me/BotFather`,
+  };
+
+  const platformLabels: Record<string, (v: string) => string> = {
+    domain: (v) => v,
+    npm: (v) => `npm: ${v}`,
+    github: (v) => `github.com/${v}`,
+    telegram: (v) => `@${v}`,
+  };
+
+  return (
+    <main className="flex-1 flex flex-col">
+      <div className="w-full max-w-[720px] mx-auto px-6 py-12 flex-1">
+        {/* Header */}
+        <div className="flex items-baseline gap-2 mb-8">
+          <h1 className="text-xl font-semibold font-[family-name:var(--font-geist-sans)]">needaname</h1>
+          <span className="text-sm text-[var(--text-secondary)]">
+            find a name that&apos;s available everywhere
+          </span>
+        </div>
+
+        {/* Search */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            search(query);
+          }}
+          className="flex gap-2 mb-8 max-md:flex-col"
+        >
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="an AI coding assistant"
+            autoFocus
+            className="flex-1 bg-[var(--surface)] border border-[var(--border)] rounded-[4px] px-3.5 py-2.5 text-sm text-[var(--text-primary)] font-[family-name:var(--font-geist-sans)] placeholder:font-[family-name:var(--font-geist-mono)] placeholder:text-[var(--text-tertiary)] placeholder:text-xs outline-none focus:border-[var(--accent)] transition-colors"
+          />
+          <button
+            type="submit"
+            disabled={loading || !query.trim()}
+            className="bg-[var(--accent)] text-[var(--bg)] font-[family-name:var(--font-geist-mono)] text-sm font-semibold px-5 py-2.5 rounded-[4px] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap max-md:w-full"
+          >
+            {loading ? "Finding..." : "Find Names"}
+          </button>
+        </form>
+
+        {/* Error */}
+        {error && (
+          <div className="bg-[#450a0a] border-l-[3px] border-[#ef4444] text-[#fca5a5] text-sm px-3.5 py-2.5 rounded-[4px] mb-6">
+            {error}
+            <button
+              onClick={() => search(query)}
+              className="ml-2 underline hover:no-underline"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* Results */}
+        {(loading || results) && (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5 border-b border-[var(--border)]">
+                  name
+                </th>
+                <th className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5 border-b border-[var(--border)]">
+                  score
+                </th>
+                {platforms.map((p) => (
+                  <th
+                    key={p}
+                    className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-center px-2 py-1.5 border-b border-[var(--border)]"
+                  >
+                    {platformHeaders[p]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <SkeletonRows />
+              ) : (
+                results?.suggestions.map((s) => (
+                  <tr key={s.name}>
+                    <td
+                      colSpan={6}
+                      className="p-0 border-b border-[var(--border)] last:border-b-0"
+                    >
+                      <button
+                        onClick={() =>
+                          setExpandedName(expandedName === s.name ? null : s.name)
+                        }
+                        className="w-full text-left hover:bg-[var(--surface)] transition-colors"
+                        aria-label={`${s.name}: ${platforms
+                          .map((p) => {
+                            const r = s.availability[p];
+                            if (!r) return "";
+                            return r.available
+                              ? `available on ${p}`
+                              : `not available on ${p}`;
+                          })
+                          .filter(Boolean)
+                          .join(", ")}`}
+                      >
+                        <div className="grid grid-cols-[1fr_auto_repeat(4,40px)] items-center min-h-[44px]">
+                          <span className="font-[family-name:var(--font-geist-mono)] text-sm font-medium px-2 py-2.5">
+                            {s.name}
+                          </span>
+                          <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-secondary)] px-2 py-2.5">
+                            .{String(s.score).replace(/^0/, "")}
+                          </span>
+                          {platforms.map((p) => (
+                            <span key={p} className="text-center text-sm py-2.5">
+                              {s.availability[p] ? (
+                                <AvailabilityIcon result={s.availability[p]} />
+                              ) : (
+                                <span className="text-[var(--taken)]">&mdash;</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                      {expandedName === s.name && (
+                        <div className="flex flex-wrap gap-2 items-center px-2 py-3 bg-[var(--surface)] rounded-[6px] mt-1 mb-2 max-md:flex-col max-md:items-stretch">
+                          {platforms.map((platform) => {
+                            const result = s.availability[platform];
+                            if (!result) return null;
+                            const isAvailable = result.available === true;
+                            const linkFn = platformLinks[platform];
+                            const labelFn = platformLabels[platform];
+                            return (
+                              <a
+                                key={platform}
+                                href={isAvailable ? linkFn(result.variant) : undefined}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`font-[family-name:var(--font-geist-mono)] text-xs px-2.5 py-1 rounded-[4px] border transition-colors ${
+                                  isAvailable
+                                    ? "text-[var(--accent)] border-[var(--accent-dim)] hover:bg-[var(--accent-dim)]"
+                                    : "text-[var(--taken)] border-[var(--border)] pointer-events-none"
+                                }`}
+                              >
+                                {labelFn(result.variant)} {isAvailable ? "→" : ""}
+                              </a>
+                            );
+                          })}
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(s.name);
+                              setCopiedName(s.name);
+                              setTimeout(() => setCopiedName(null), 2000);
+                            }}
+                            className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-secondary)] border border-[var(--border)] px-2.5 py-1 rounded-[4px] hover:text-[var(--text-primary)] hover:border-[var(--text-tertiary)] transition-colors md:ml-auto"
+                          >
+                            {copiedName === s.name ? "copied!" : "copy name"}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Footer */}
+      <footer className="w-full max-w-[720px] mx-auto px-6 py-6 border-t border-[var(--border)] font-[family-name:var(--font-geist-mono)] text-[11px] text-[var(--text-tertiary)] flex gap-4">
+        <span>API</span>
+        <span>Telegram Bot</span>
+        <span>MCP</span>
+      </footer>
+    </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <SearchPage />
+    </Suspense>
+  );
+}
