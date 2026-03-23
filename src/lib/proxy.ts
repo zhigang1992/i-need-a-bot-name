@@ -24,8 +24,9 @@ export async function fetchWithProxy(
     // Bun's native fetch supports proxy as a string option
     return fetch(url, {
       ...init,
+      // @ts-expect-error — bun-specific fetch option
       proxy: proxyUrl,
-    } as RequestInit);
+    });
   }
 
   return fetch(url, init);
