@@ -1,0 +1,6 @@
+{
+    "scripts": {
+        "setup": "npm install\nln -sf \"$CONDUCTOR_ROOT_PATH/.env\" .env",
+        "run": "npx next dev --port $CONDUCTOR_PORT"
+    }
+}
