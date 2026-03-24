@@ -126,7 +126,15 @@ export async function generateNames(
     }
   }
 
-  if (candidates.length === 0) {
+  // Deduplicate by name (LLM sometimes generates the same name twice)
+  const seen = new Set<string>();
+  const unique = candidates.filter((c) => {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+    return true;
+  });
+
+  if (unique.length === 0) {
     // Log what we got so we can debug
     console.error("[generator] No valid candidates after filtering. Parsed items:", JSON.stringify(parsed).slice(0, 500));
 
@@ -139,5 +147,5 @@ export async function generateNames(
     throw new Error("no_names_generated: LLM returned no valid candidates");
   }
 
-  return candidates;
+  return unique;
 }
