@@ -35,19 +35,19 @@ function SkeletonRows() {
   return (
     <>
       {[1, 2, 3].map((i) => (
-        <tr key={i}>
-          <td className="py-2.5 px-2">
+        <div key={i} className="grid grid-cols-[1fr_auto_repeat(4,40px)] items-center min-h-[44px] border-b border-[var(--border)]">
+          <span className="px-2 py-2.5">
             <div className="skeleton h-4" style={{ width: 80 + i * 20 }} />
-          </td>
-          <td className="py-2.5 px-2">
+          </span>
+          <span className="px-2 py-2.5">
             <div className="skeleton h-4 w-8" />
-          </td>
+          </span>
           {["a", "b", "c", "d"].map((p) => (
-            <td key={p} className="py-2.5 px-2 text-center">
-              <div className="skeleton h-4 w-4 rounded-full mx-auto" />
-            </td>
+            <span key={p} className="flex justify-center py-2.5">
+              <div className="skeleton h-4 w-4 rounded-full" />
+            </span>
           ))}
-        </tr>
+        </div>
       ))}
     </>
   );
@@ -253,35 +253,30 @@ function SearchPage() {
 
         {/* Results */}
         {(isLoading || displayNames.length > 0) && (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5 border-b border-[var(--border)]">
-                  name
-                </th>
-                <th className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5 border-b border-[var(--border)]">
-                  score
-                </th>
-                {platforms.map((p) => (
-                  <th
-                    key={p}
-                    className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-center px-2 py-1.5 border-b border-[var(--border)]"
-                  >
-                    {platformHeaders[p]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+          <div className="w-full">
+            {/* Header row — uses same grid as data rows for alignment */}
+            <div className="grid grid-cols-[1fr_auto_repeat(4,40px)] items-center border-b border-[var(--border)]">
+              <span className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5">
+                name
+              </span>
+              <span className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5">
+                score
+              </span>
+              {platforms.map((p) => (
+                <span
+                  key={p}
+                  className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-center px-2 py-1.5"
+                >
+                  {platformHeaders[p]}
+                </span>
+              ))}
+            </div>
+            <div>
               {phase === "generating" && displayNames.length === 0 ? (
                 <SkeletonRows />
               ) : (
                 displayNames.map((s) => (
-                  <tr key={s.name}>
-                    <td
-                      colSpan={6}
-                      className="p-0 border-b border-[var(--border)] last:border-b-0"
-                    >
+                  <div key={s.name} className="border-b border-[var(--border)] last:border-b-0">
                       <button
                         onClick={() =>
                           setExpandedName(expandedName === s.name ? null : s.name)
@@ -360,12 +355,11 @@ function SearchPage() {
                           </button>
                         </div>
                       )}
-                    </td>
-                  </tr>
+                  </div>
                 ))
               )}
-            </tbody>
-          </table>
+            </div>
+          </div>
         )}
       </div>
 
