@@ -4,23 +4,50 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { CheckResult } from "@/lib/types";
 
-function AvailabilityIcon({ result }: { result: CheckResult }) {
-  if (result.confidence === "error") {
+const RESULT_COUNT = 5;
+
+function AvailabilityBadge({ platform, result }: { platform: string; result?: CheckResult }) {
+  const labels: Record<string, string> = {
+    domain: ".com",
+    npm: "npm",
+    github: "GitHub",
+    telegram: "Telegram",
+  };
+  const label = labels[platform] || platform;
+
+  if (!result) {
     return (
-      <span className="text-[var(--error)]" title={result.error || "Couldn't check"}>
-        &#x26A0;
+      <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full bg-[var(--surface)] text-[var(--text-tertiary)] border border-[var(--border)]">
+        <span className="inline-block w-2 h-2 rounded-full border border-[var(--text-tertiary)] border-t-transparent animate-spin" />
+        {label}
       </span>
     );
   }
-  if (result.available) {
-    return <span className="text-[var(--accent)]">&#x2713;</span>;
-  }
-  return <span className="text-[var(--taken)]">&mdash;</span>;
-}
 
-function SpinnerDot() {
+  if (result.confidence === "error") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#451a03]/50 text-[var(--error)] border border-[var(--error)]/30"
+        title={result.error || "Couldn't check"}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  if (result.available) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#052e16]/60 text-[#86efac] border border-[var(--accent)]/30">
+        <span className="text-[10px]">✓</span>
+        {label}
+      </span>
+    );
+  }
+
   return (
-    <span className="inline-block w-3 h-3 rounded-full border-2 border-[var(--border)] border-t-[var(--text-tertiary)] animate-spin" />
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[var(--surface)] text-[var(--text-tertiary)] border border-[var(--border)]">
+      {label}
+    </span>
   );
 }
 
@@ -31,25 +58,23 @@ interface StreamingName {
   score?: number;
 }
 
-function SkeletonRows() {
+function SkeletonCards() {
   return (
-    <>
+    <div className="space-y-3">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="grid grid-cols-[1fr_auto_repeat(4,40px)] items-center min-h-[44px] border-b border-[var(--border)]">
-          <span className="px-2 py-2.5">
-            <div className="skeleton h-4" style={{ width: 80 + i * 20 }} />
-          </span>
-          <span className="px-2 py-2.5">
-            <div className="skeleton h-4 w-8" />
-          </span>
-          {["a", "b", "c", "d"].map((p) => (
-            <span key={p} className="flex justify-center py-2.5">
-              <div className="skeleton h-4 w-4 rounded-full" />
-            </span>
-          ))}
+        <div key={i} className="rounded-lg border border-[var(--border)] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="skeleton h-5 rounded" style={{ width: 80 + i * 20 }} />
+            <div className="skeleton h-4 w-10 rounded" />
+          </div>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4].map((j) => (
+              <div key={j} className="skeleton h-6 w-16 rounded-full" />
+            ))}
+          </div>
         </div>
       ))}
-    </>
+    </div>
   );
 }
 
@@ -71,7 +96,6 @@ function SearchPage() {
     async (description: string) => {
       if (!description.trim()) return;
 
-      // Abort previous request
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -88,7 +112,7 @@ function SearchPage() {
         const res = await fetch("/api/suggest-stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description: description.trim(), count: 5 }),
+          body: JSON.stringify({ description: description.trim(), count: RESULT_COUNT }),
           signal: controller.signal,
         });
 
@@ -144,7 +168,9 @@ function SearchPage() {
   const handleSSEEvent = useCallback((event: string, data: unknown) => {
     if (event === "names") {
       const { names: incoming } = data as { names: Array<{ name: string; relevance: number }> };
-      setNames(incoming.map((n) => ({ name: n.name, relevance: n.relevance, availability: {} })));
+      // Only show up to RESULT_COUNT during streaming (LLM generates more candidates internally)
+      const limited = incoming.slice(0, RESULT_COUNT);
+      setNames(limited.map((n) => ({ name: n.name, relevance: n.relevance, availability: {} })));
       setPhase("checking");
     } else if (event === "check") {
       const { name, platform, result } = data as { name: string; platform: string; result: CheckResult };
@@ -155,12 +181,13 @@ function SearchPage() {
       );
     } else if (event === "done") {
       const { suggestions } = data as { suggestions: Array<{ name: string; score: number; availability: Record<string, CheckResult> }> };
-      // Update scores and set final order
-      setNames((prev) =>
-        prev.map((n) => {
-          const final = suggestions.find((s) => s.name === n.name);
-          return final ? { ...n, score: final.score, availability: final.availability } : n;
-        })
+      setNames(
+        suggestions.map((s) => ({
+          name: s.name,
+          relevance: 0,
+          score: s.score,
+          availability: s.availability,
+        }))
       );
       setFinalOrder(suggestions.map((s) => s.name));
       setPhase("done");
@@ -177,12 +204,6 @@ function SearchPage() {
   }, []);
 
   const platforms = ["domain", "npm", "github", "telegram"];
-  const platformHeaders: Record<string, string> = {
-    domain: ".com",
-    npm: "npm",
-    github: "github",
-    telegram: "telegram",
-  };
 
   const platformLinks: Record<string, (v: string) => string> = {
     domain: (v) => `https://www.namecheap.com/domains/registration/results/?domain=${v}`,
@@ -191,14 +212,14 @@ function SearchPage() {
     telegram: () => `https://t.me/BotFather`,
   };
 
-  const platformLabels: Record<string, (v: string) => string> = {
-    domain: (v) => v,
-    npm: (v) => `npm: ${v}`,
-    github: (v) => `github.com/${v}`,
-    telegram: (v) => `@${v}`,
+  const platformActionLabels: Record<string, (v: string) => string> = {
+    domain: (v) => `Register ${v}`,
+    npm: (v) => `Claim ${v} on npm`,
+    github: (v) => `Create ${v} on GitHub`,
+    telegram: (v) => `Set up @${v} with BotFather`,
   };
 
-  // Sort names by final ranking order if available, otherwise show as-is
+  // Show final ranked order or streaming order
   const displayNames = finalOrder
     ? finalOrder.map((n) => names.find((x) => x.name === n)).filter(Boolean) as StreamingName[]
     : names;
@@ -207,13 +228,13 @@ function SearchPage() {
 
   return (
     <main className="flex-1 flex flex-col">
-      <div className="w-full max-w-[720px] mx-auto px-6 py-12 flex-1">
+      <div className="w-full max-w-[640px] mx-auto px-5 py-16 flex-1">
         {/* Header */}
-        <div className="flex items-baseline gap-2 mb-8">
-          <h1 className="text-xl font-semibold font-[family-name:var(--font-geist-sans)]">needaname</h1>
-          <span className="text-sm text-[var(--text-secondary)]">
-            find a name that&apos;s available everywhere
-          </span>
+        <div className="mb-10 text-center">
+          <h1 className="text-2xl font-semibold font-[family-name:var(--font-geist-sans)] mb-1">needaname</h1>
+          <p className="text-sm text-[var(--text-secondary)]">
+            Find a name that&apos;s available everywhere
+          </p>
         </div>
 
         {/* Search */}
@@ -222,20 +243,20 @@ function SearchPage() {
             e.preventDefault();
             search(query);
           }}
-          className="flex gap-2 mb-8 max-md:flex-col"
+          className="flex gap-2 mb-10 max-md:flex-col"
         >
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="an AI coding assistant"
+            placeholder="Describe what you're building..."
             autoFocus
-            className="flex-1 bg-[var(--surface)] border border-[var(--border)] rounded-[4px] px-3.5 py-2.5 text-sm text-[var(--text-primary)] font-[family-name:var(--font-geist-sans)] placeholder:font-[family-name:var(--font-geist-mono)] placeholder:text-[var(--text-tertiary)] placeholder:text-xs outline-none focus:border-[var(--accent)] transition-colors"
+            className="flex-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text-primary)] font-[family-name:var(--font-geist-sans)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--accent)] transition-colors"
           />
           <button
             type="submit"
             disabled={isLoading || !query.trim()}
-            className="bg-[var(--accent)] text-[var(--bg)] font-[family-name:var(--font-geist-mono)] text-sm font-semibold px-5 py-2.5 rounded-[4px] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap max-md:w-full"
+            className="bg-[var(--accent)] text-[var(--bg)] font-[family-name:var(--font-geist-sans)] text-sm font-semibold px-6 py-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap max-md:w-full"
           >
             {phase === "generating" ? "Thinking..." : phase === "checking" ? "Checking..." : "Find Names"}
           </button>
@@ -243,7 +264,7 @@ function SearchPage() {
 
         {/* Error */}
         {error && (
-          <div className="bg-[#450a0a] border-l-[3px] border-[#ef4444] text-[#fca5a5] text-sm px-3.5 py-2.5 rounded-[4px] mb-6">
+          <div className="bg-[#450a0a] border border-[#ef4444]/30 text-[#fca5a5] text-sm px-4 py-3 rounded-lg mb-6">
             {error}
             <button onClick={() => search(query)} className="ml-2 underline hover:no-underline">
               Try again
@@ -252,119 +273,112 @@ function SearchPage() {
         )}
 
         {/* Results */}
-        {(isLoading || displayNames.length > 0) && (
-          <div className="w-full">
-            {/* Header row — uses same grid as data rows for alignment */}
-            <div className="grid grid-cols-[1fr_auto_repeat(4,40px)] items-center border-b border-[var(--border)]">
-              <span className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5">
-                name
-              </span>
-              <span className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-left px-2 py-1.5">
-                score
-              </span>
-              {platforms.map((p) => (
-                <span
-                  key={p}
-                  className="font-[family-name:var(--font-geist-mono)] text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-[0.05em] text-center px-2 py-1.5"
+        {phase === "generating" && displayNames.length === 0 && <SkeletonCards />}
+
+        {displayNames.length > 0 && (
+          <div className="space-y-3">
+            {displayNames.map((s) => {
+              const isExpanded = expandedName === s.name;
+              const availableCount = Object.values(s.availability).filter((r) => r.available).length;
+              const checkedCount = Object.keys(s.availability).length;
+              const totalPlatforms = platforms.length;
+
+              return (
+                <div
+                  key={s.name}
+                  className={`rounded-lg border transition-colors ${
+                    isExpanded
+                      ? "border-[var(--accent)]/40 bg-[var(--surface)]"
+                      : "border-[var(--border)] hover:border-[var(--text-tertiary)]"
+                  }`}
                 >
-                  {platformHeaders[p]}
-                </span>
-              ))}
-            </div>
-            <div>
-              {phase === "generating" && displayNames.length === 0 ? (
-                <SkeletonRows />
-              ) : (
-                displayNames.map((s) => (
-                  <div key={s.name} className="border-b border-[var(--border)] last:border-b-0">
-                      <button
-                        onClick={() =>
-                          setExpandedName(expandedName === s.name ? null : s.name)
-                        }
-                        className="w-full text-left hover:bg-[var(--surface)] transition-colors"
-                        aria-label={`${s.name}: ${platforms
-                          .map((p) => {
-                            const r = s.availability[p];
-                            if (!r) return "checking";
-                            return r.available ? `available on ${p}` : `not available on ${p}`;
-                          })
-                          .join(", ")}`}
-                      >
-                        <div className="grid grid-cols-[1fr_auto_repeat(4,40px)] items-center min-h-[44px]">
-                          <span className="font-[family-name:var(--font-geist-mono)] text-sm font-medium px-2 py-2.5">
-                            {s.name}
-                          </span>
-                          <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-secondary)] px-2 py-2.5">
-                            {s.score !== undefined ? s.score.toFixed(2) : (
-                              <span className="text-[var(--text-tertiary)]">···</span>
-                            )}
-                          </span>
-                          {platforms.map((p) => (
-                            <span key={p} className="text-center text-sm py-2.5">
-                              {s.availability[p] ? (
-                                <AvailabilityIcon result={s.availability[p]} />
-                              ) : (
-                                <SpinnerDot />
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      </button>
-                      {expandedName === s.name && (
-                        <div className="flex flex-wrap gap-2 items-center px-2 py-3 bg-[var(--surface)] rounded-[6px] mt-1 mb-2 max-md:flex-col max-md:items-stretch">
-                          {platforms.map((platform) => {
-                            const result = s.availability[platform];
-                            if (!result) {
-                              return (
-                                <span
-                                  key={platform}
-                                  className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-tertiary)] px-2.5 py-1 border border-[var(--border)] rounded-[4px]"
+                  <button
+                    onClick={() => setExpandedName(isExpanded ? null : s.name)}
+                    className="w-full text-left p-4"
+                    aria-label={`${s.name}: ${availableCount} of ${totalPlatforms} platforms available`}
+                  >
+                    {/* Name + score row */}
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="font-[family-name:var(--font-geist-mono)] text-base font-medium">
+                        {s.name}
+                      </span>
+                      <span className="text-xs text-[var(--text-tertiary)]">
+                        {checkedCount === totalPlatforms ? (
+                          availableCount === totalPlatforms ? (
+                            <span className="text-[var(--accent)]">Available everywhere!</span>
+                          ) : (
+                            `${availableCount}/${totalPlatforms} available`
+                          )
+                        ) : (
+                          "Checking..."
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Platform badges */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {platforms.map((p) => (
+                        <AvailabilityBadge key={p} platform={p} result={s.availability[p]} />
+                      ))}
+                    </div>
+                  </button>
+
+                  {/* Expanded: action links */}
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-1 border-t border-[var(--border)]">
+                      <div className="space-y-2 mt-3">
+                        {platforms.map((platform) => {
+                          const result = s.availability[platform];
+                          if (!result) return null;
+                          const isAvailable = result.available === true;
+                          const linkFn = platformLinks[platform];
+                          const labelFn = platformActionLabels[platform];
+                          return (
+                            <div key={platform} className="flex items-center justify-between text-sm">
+                              <span className={isAvailable ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>
+                                {labelFn(result.variant)}
+                              </span>
+                              {isAvailable ? (
+                                <a
+                                  href={linkFn(result.variant)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-[var(--accent)] hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  checking {platformHeaders[platform]}...
-                                </span>
-                              );
-                            }
-                            const isAvailable = result.available === true;
-                            const linkFn = platformLinks[platform];
-                            const labelFn = platformLabels[platform];
-                            return (
-                              <a
-                                key={platform}
-                                href={isAvailable ? linkFn(result.variant) : undefined}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`font-[family-name:var(--font-geist-mono)] text-xs px-2.5 py-1 rounded-[4px] border transition-colors ${
-                                  isAvailable
-                                    ? "text-[var(--accent)] border-[var(--accent-dim)] hover:bg-[var(--accent-dim)]"
-                                    : "text-[var(--taken)] border-[var(--border)] pointer-events-none"
-                                }`}
-                              >
-                                {labelFn(result.variant)} {isAvailable ? "→" : ""}
-                              </a>
-                            );
-                          })}
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(s.name);
-                              setCopiedName(s.name);
-                              setTimeout(() => setCopiedName(null), 2000);
-                            }}
-                            className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-secondary)] border border-[var(--border)] px-2.5 py-1 rounded-[4px] hover:text-[var(--text-primary)] hover:border-[var(--text-tertiary)] transition-colors md:ml-auto"
-                          >
-                            {copiedName === s.name ? "copied!" : "copy name"}
-                          </button>
-                        </div>
-                      )}
-                  </div>
-                ))
-              )}
-            </div>
+                                  Go →
+                                </a>
+                              ) : result.confidence === "error" ? (
+                                <span className="text-xs text-[var(--error)]">Error</span>
+                              ) : (
+                                <span className="text-xs text-[var(--text-tertiary)]">Taken</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(s.name);
+                          setCopiedName(s.name);
+                          setTimeout(() => setCopiedName(null), 2000);
+                        }}
+                        className="mt-3 w-full text-center text-xs text-[var(--text-secondary)] border border-[var(--border)] py-1.5 rounded-md hover:text-[var(--text-primary)] hover:border-[var(--text-tertiary)] transition-colors"
+                      >
+                        {copiedName === s.name ? "Copied!" : "Copy name"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <footer className="w-full max-w-[720px] mx-auto px-6 py-6 border-t border-[var(--border)] font-[family-name:var(--font-geist-mono)] text-[11px] text-[var(--text-tertiary)] flex gap-4">
+      <footer className="w-full max-w-[640px] mx-auto px-5 py-6 border-t border-[var(--border)] text-xs text-[var(--text-tertiary)] flex gap-4">
         <a href="/api/suggest" target="_blank" rel="noopener noreferrer" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors no-underline">API</a>
         <span>Telegram Bot</span>
         <span>MCP</span>
