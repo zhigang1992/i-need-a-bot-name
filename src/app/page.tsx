@@ -58,22 +58,11 @@ interface StreamingName {
   score?: number;
 }
 
-function SkeletonCards() {
+function GeneratingIndicator() {
   return (
-    <div className="space-y-3">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="rounded-lg border border-[var(--border)] p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="skeleton h-5 rounded" style={{ width: 80 + i * 20 }} />
-            <div className="skeleton h-4 w-10 rounded" />
-          </div>
-          <div className="flex gap-2">
-            {[1, 2, 3, 4].map((j) => (
-              <div key={j} className="skeleton h-6 w-16 rounded-full" />
-            ))}
-          </div>
-        </div>
-      ))}
+    <div className="flex items-center gap-3 py-8 justify-center text-sm text-[var(--text-secondary)]">
+      <span className="inline-block w-4 h-4 rounded-full border-2 border-[var(--border)] border-t-[var(--accent)] animate-spin" />
+      Generating name ideas...
     </div>
   );
 }
@@ -273,7 +262,7 @@ function SearchPage() {
         )}
 
         {/* Results */}
-        {phase === "generating" && displayNames.length === 0 && <SkeletonCards />}
+        {phase === "generating" && displayNames.length === 0 && <GeneratingIndicator />}
 
         {displayNames.length > 0 && (
           <div className="space-y-3">
