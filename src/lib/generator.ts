@@ -60,8 +60,14 @@ export async function generateNames(
   const client = new Anthropic({
     apiKey: process.env.SDK_ANTHROPIC_API_KEY,
     baseURL: process.env.SDK_ANTHROPIC_BASE_URL || undefined,
+    // Abort a hung LLM call instead of stalling the SSE stream indefinitely.
+    // The SDK default timeout is 10 minutes — far too long for an interactive flow.
+    timeout: 30_000,
+    // Retry once on transient failures (429 / 5xx / network errors). This is the
+    // SDK's built-in backoff retry, separate from the parse-failure retry below.
+    maxRetries: 1,
   });
-  // Use 2x multiplier to balance quality vs latency (glm-5 is slow with thinking)
+  // Over-generate (2x) so ranking has headroom after dedupe and availability filtering.
   const candidateCount = count * 2;
 
   const response = await client.messages.create({
