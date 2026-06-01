@@ -1,0 +1,14 @@
+{
+  // Claude Desktop preview config for Vacant (the name-finder).
+  // Docs: https://code.claude.com/docs/en/desktop#configure-preview-servers
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vacant",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    }
+  ]
+}
