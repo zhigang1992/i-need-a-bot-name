@@ -1,7 +1,10 @@
 export interface CheckResult {
   variant: string;
   available: boolean | null;
-  confidence: "confirmed" | "likely" | "error";
+  // "confirmed" — authoritative yes/no. "likely" — inferred, not guaranteed.
+  // "error" — the check failed. "unconfigured" — the platform check is not set
+  // up (e.g. missing API token) so we deliberately skipped it.
+  confidence: "confirmed" | "likely" | "error" | "unconfigured";
   error?: string;
 }
 

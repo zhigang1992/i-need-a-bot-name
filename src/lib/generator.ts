@@ -1,4 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { generateText } from "ai";
+import { anthropic, MODEL_ID } from "./llm";
 import type { NameCandidate } from "./types";
 
 const SYSTEM_PROMPT = `You are a product naming expert. Given a description of what someone is building, generate short, brandable names that could work as a product name across multiple platforms (domain, npm, GitHub, Telegram bot).
@@ -57,32 +58,22 @@ export async function generateNames(
   count: number,
   _retryCount = 0
 ): Promise<NameCandidate[]> {
-  const client = new Anthropic({
-    apiKey: process.env.SDK_ANTHROPIC_API_KEY,
-    baseURL: process.env.SDK_ANTHROPIC_BASE_URL || undefined,
-    // Abort a hung LLM call instead of stalling the SSE stream indefinitely.
-    // The SDK default timeout is 10 minutes — far too long for an interactive flow.
-    timeout: 30_000,
-    // Retry once on transient failures (429 / 5xx / network errors). This is the
-    // SDK's built-in backoff retry, separate from the parse-failure retry below.
-    maxRetries: 1,
-  });
   // Over-generate (2x) so ranking has headroom after dedupe and availability filtering.
   const candidateCount = count * 2;
 
-  const response = await client.messages.create({
-    model: process.env.SDK_ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
-    max_tokens: 2048,
+  const { text } = await generateText({
+    model: anthropic(MODEL_ID),
+    maxOutputTokens: 2048,
     system: SYSTEM_PROMPT.replace("{count}", String(candidateCount)),
     messages: [
       ...FEW_SHOT_EXAMPLES,
       { role: "user", content: description },
     ],
+    // Abort a hung LLM call instead of stalling the request indefinitely, and
+    // retry once on transient failures (429 / 5xx / network).
+    abortSignal: AbortSignal.timeout(30_000),
+    maxRetries: 1,
   });
-
-  // Extract text from response — glm-5 returns thinking + text blocks
-  const textBlock = response.content.find((block) => block.type === "text");
-  const text = textBlock && "text" in textBlock ? textBlock.text : "";
 
   let parsed: unknown[];
   try {

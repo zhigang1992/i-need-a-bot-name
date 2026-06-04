@@ -3,12 +3,11 @@ import { generateNames } from "./generator";
 import { deriveAllVariants } from "./deriver";
 import { checkAvailability } from "./checkers";
 import { rankSuggestions } from "./ranker";
-
-const DEFAULT_PLATFORMS = ["domain", "npm", "github", "telegram"];
+import { activePlatformIds } from "./platforms";
 
 export async function suggest(
   description: string,
-  platforms: string[] = DEFAULT_PLATFORMS,
+  platforms: string[] = activePlatformIds(),
   count: number = 5
 ): Promise<SuggestResponse> {
   // 1. Generate base name candidates via LLM
@@ -57,6 +56,6 @@ export async function suggest(
   return {
     suggestions,
     checked_at: new Date().toISOString(),
-    note: "Telegram availability is inferred, not guaranteed. Domain/npm/GitHub availability is confirmed.",
+    note: "Domain/npm/GitHub/YouTube availability is confirmed at check time. Telegram (when enabled) is inferred.",
   };
 }
