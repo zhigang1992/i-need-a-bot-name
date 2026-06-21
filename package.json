@@ -9,8 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.81",
+    "@ai-sdk/react": "^3.0.195",
     "@anthropic-ai/sdk": "^0.80.0",
     "@vercel/mcp-adapter": "^0.3.2",
+    "ai": "^6.0.193",
     "next": "16.2.1",
     "npm-name": "^8.1.0",
     "react": "19.2.4",

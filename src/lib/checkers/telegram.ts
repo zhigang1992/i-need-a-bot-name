@@ -4,10 +4,12 @@ import { fetchWithProxy } from "../proxy";
 export async function checkTelegram(variant: string): Promise<CheckResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
+    // Not an error — the check is simply not set up. The UI shows this as a
+    // neutral "not configured" state rather than a scary red error badge.
     return {
       variant,
       available: null,
-      confidence: "error",
+      confidence: "unconfigured",
       error: "no_bot_token",
     };
   }

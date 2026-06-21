@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "needaname — Find a name that's available everywhere",
+  title: "Vacant — Find a name that's actually free",
   description:
-    "Describe your project, get names checked across domain, npm, GitHub, and Telegram simultaneously.",
+    "Describe what you're building. Vacant suggests brandable names and checks the .com, npm, GitHub, and YouTube handle for each, live.",
 };
 
 export default function RootLayout({

@@ -40,6 +40,15 @@ const PLATFORM_RULES: Record<
       v.length <= 32 &&
       /^[a-z][a-z0-9_]*bot$/i.test(v),
   },
+  youtube: {
+    // YouTube handles: 3–30 chars, letters/digits/underscore/hyphen/period.
+    derive: (name) => {
+      const clean = name.toLowerCase().replace(/[^a-z0-9._-]/g, "");
+      if (clean.length < 3 || clean.length > 30) return null;
+      return clean;
+    },
+    validate: (v) => v.length >= 3 && v.length <= 30 && /^[a-z0-9._-]+$/.test(v),
+  },
 };
 
 export function deriveVariant(
